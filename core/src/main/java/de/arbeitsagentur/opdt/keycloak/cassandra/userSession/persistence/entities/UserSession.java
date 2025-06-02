@@ -21,6 +21,7 @@ import com.datastax.oss.driver.api.mapper.annotations.CqlName;
 import com.datastax.oss.driver.api.mapper.annotations.Entity;
 import com.datastax.oss.driver.api.mapper.annotations.PartitionKey;
 import de.arbeitsagentur.opdt.keycloak.common.ExpirableEntity;
+import de.arbeitsagentur.opdt.keycloak.cassandra.transaction.TransactionalEntity;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.*;
@@ -33,9 +34,11 @@ import org.keycloak.models.UserSessionModel;
 @AllArgsConstructor
 @Entity
 @CqlName("user_sessions")
-public class UserSession implements ExpirableEntity {
+public class UserSession implements ExpirableEntity, TransactionalEntity {
     @PartitionKey
     private String id;
+
+    private Long version;
 
     private String realmId;
     private String userId;

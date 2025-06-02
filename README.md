@@ -57,6 +57,8 @@ For efficient searches, attributes can be defined as **indexed attributes** by p
 All write-queries are done conditionally via Cassandra Lightweight Transactions. Therefore we store a version column in each of the tables. To be able to use this to get notified if a conflicting change occured after data was read, the entityVersion is exposed via a **readonly attribute readonly.entityVersion**.
 In order to pass a version in update operations, one can use the corresponding attribute **internal.entityVersion**.
 
+Lightweight transactions for user sessions are disabled by default and can be enabled by setting the environment variable `KC_COMMUNITY_DATASTORE_CASSANDRA_USER_SESSION_LWT_ENABLED=true` (or system property `kc.community.datastore.cassandra.userSession.lwt.enabled=true`).
+
 ### Uniqueness across username and password
 
 This extension supports additional checks to prevent setting username to a value that is already as email of another user and setting email to a value used as username.

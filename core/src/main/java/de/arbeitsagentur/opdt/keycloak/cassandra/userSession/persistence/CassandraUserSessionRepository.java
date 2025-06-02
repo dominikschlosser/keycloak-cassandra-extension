@@ -19,11 +19,14 @@ import static org.keycloak.models.UserSessionModel.CORRESPONDING_SESSION_ID;
 import static org.keycloak.models.UserSessionModel.SessionPersistenceState.PERSISTENT;
 
 import de.arbeitsagentur.opdt.keycloak.cassandra.StreamExtensions;
+import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraFeatures;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.AttributeToUserSessionMapping;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.AuthenticatedClientSessionValue;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.UserSession;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.UserSessionToAttributeMapping;
 import de.arbeitsagentur.opdt.keycloak.common.TimeAdapter;
+import de.arbeitsagentur.opdt.keycloak.common.ModelIllegalStateException;
+import com.datastax.oss.driver.api.core.cql.ResultSet;
 import java.util.*;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -243,12 +246,46 @@ public class CassandraUserSessionRepository implements UserSessionRepository {
     private void insertOrUpdate(UserSession session) {
         if ((session.getOffline() != null && session.getOffline())
                 || PERSISTENT.equals(session.getPersistenceState())) {
-            if (session.getExpiration() == null) {
-                dao.insertOrUpdate(session);
+            if (CassandraFeatures.isUserSessionLwtEnabled()) {
+                boolean withTtl = session.getExpiration() != null;
+                Integer ttl = null;
+                if (withTtl) {
+                    ttl = TimeAdapter.fromLongWithTimeInSecondsToIntegerWithTimeInSeconds(
+                            TimeAdapter.fromMilliSecondsToSeconds(
+                                    session.getExpiration() - Time.currentTimeMillis()));
+                }
+
+                if (session.getVersion() == null) {
+                    session.setVersion(1L);
+                    if (withTtl) {
+                        dao.insert(session, ttl);
+                    } else {
+                        dao.insert(session);
+                    }
+                } else {
+                    long expected = session.getVersion();
+                    session.incrementVersion();
+                    ResultSet result =
+                            withTtl
+                                    ? dao.update(session, expected, ttl)
+                                    : dao.update(session, expected);
+                    if (!result.wasApplied()) {
+                        throw new ModelIllegalStateException(
+                                "Entity couldn't be updated because its version "
+                                        + expected
+                                        + " doesn't match the version in the database");
+                    }
+                }
             } else {
-                int ttl = TimeAdapter.fromLongWithTimeInSecondsToIntegerWithTimeInSeconds(
-                        TimeAdapter.fromMilliSecondsToSeconds(session.getExpiration() - Time.currentTimeMillis()));
-                dao.insertOrUpdate(session, ttl);
+                if (session.getExpiration() == null) {
+                    dao.insertOrUpdate(session);
+                } else {
+                    int ttl =
+                            TimeAdapter.fromLongWithTimeInSecondsToIntegerWithTimeInSeconds(
+                                    TimeAdapter.fromMilliSecondsToSeconds(
+                                            session.getExpiration() - Time.currentTimeMillis()));
+                    dao.insertOrUpdate(session, ttl);
+                }
             }
         }
     }

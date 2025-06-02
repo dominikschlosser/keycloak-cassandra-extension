@@ -17,19 +17,27 @@ package de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence;
 
 import com.datastax.oss.driver.api.core.PagingIterable;
 import com.datastax.oss.driver.api.mapper.annotations.*;
+import com.datastax.oss.driver.api.core.cql.ResultSet;
 import de.arbeitsagentur.opdt.keycloak.cassandra.BaseDao;
+import de.arbeitsagentur.opdt.keycloak.cassandra.transaction.TransactionalDao;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.AttributeToUserSessionMapping;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.UserSession;
 import de.arbeitsagentur.opdt.keycloak.cassandra.userSession.persistence.entities.UserSessionToAttributeMapping;
 import java.util.List;
 
 @Dao
-public interface UserSessionDao extends BaseDao {
-    @Update
-    void insertOrUpdate(UserSession session);
+public interface UserSessionDao extends TransactionalDao<UserSession> {
+    @Insert(ifNotExists = true)
+    void insert(UserSession session);
 
-    @Update(ttl = ":ttl")
-    void insertOrUpdate(UserSession session, int ttl);
+    @Insert(ifNotExists = true, ttl = ":ttl")
+    void insert(UserSession session, int ttl);
+
+    @Update(customIfClause = "version = :expectedVersion")
+    ResultSet update(UserSession session, long expectedVersion);
+
+    @Update(customIfClause = "version = :expectedVersion", ttl = ":ttl")
+    ResultSet update(UserSession session, long expectedVersion, int ttl);
 
     @Select(customWhereClause = "id = :id")
     UserSession findById(String id);
