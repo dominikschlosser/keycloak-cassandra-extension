@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
-import org.keycloak.models.ModelDuplicateException;
 import org.keycloak.models.SingleUseObjectProvider;
 
 @JBossLog
@@ -39,13 +38,7 @@ public class CassandraSingleUseObjectProvider implements SingleUseObjectProvider
     public void put(String key, long lifespanSeconds, Map<String, String> notes) {
         log.tracef("put(%s)%s", key, getShortStackTrace());
 
-        SingleUseObject singleUseEntity = repository.findSingleUseObjectByKey(key);
-
-        if (singleUseEntity != null) {
-            throw new ModelDuplicateException("Single-use object entity exists: " + singleUseEntity.getKey());
-        }
-
-        singleUseEntity = SingleUseObject.builder()
+        SingleUseObject singleUseEntity = SingleUseObject.builder()
                 .key(key)
                 .notes(getInternalNotes(notes))
                 .build();
