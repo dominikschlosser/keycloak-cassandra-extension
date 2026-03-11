@@ -115,12 +115,13 @@ public class SingleUseObjectModelTest extends KeycloakModelTest {
             Assert.assertFalse(singleUseStore.replace(key, notes2));
 
             singleUseStore.put(key, 3, notes);
+            singleUseStore.put(key, 3, notes2);
         });
 
         inComittedTransaction(session -> {
             SingleUseObjectProvider singleUseStore = session.singleUseObjects();
             Map<String, String> actualNotes = singleUseStore.get(key);
-            Assert.assertEquals(notes, actualNotes);
+            Assert.assertEquals(notes2, actualNotes);
 
             Assert.assertTrue(singleUseStore.replace(key, notes2));
         });
