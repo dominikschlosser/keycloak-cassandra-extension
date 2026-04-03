@@ -261,6 +261,20 @@ public class GroupModelTest extends KeycloakModelTest {
     }
 
     @Test
+    public void testSearchForGroupByNameStreamHandlesNullSearch() {
+        withRealm(realmId, (session, realm) -> {
+            Assert.assertThrows(IllegalArgumentException.class, () -> session.groups()
+                    .searchForGroupByNameStream(realm, null, null, null, null)
+                    .count());
+            Assert.assertThrows(IllegalArgumentException.class, () -> session.groups()
+                    .searchForGroupByNameStream(realm, null, false, null, null)
+                    .count());
+
+            return null;
+        });
+    }
+
+    @Test
     public void testSearchByNameWithHierarchy() {
         withRealm(realmId, (session, realm) -> {
             session.groups()
@@ -414,6 +428,17 @@ public class GroupModelTest extends KeycloakModelTest {
             Assert.assertThrows(
                     ModelDuplicateException.class,
                     () -> groupProvider.moveGroup(realm, thirdGroupWithoutParent, secondGroup));
+            return null;
+        });
+    }
+
+    @Test
+    public void testGetTopLevelGroupsStreamHandlesNullSearchAndExact() {
+        withRealm(realmId, (session, realm) -> {
+            Assert.assertThrows(IllegalArgumentException.class, () -> session.groups()
+                    .getTopLevelGroupsStream(realm, null, null, null, null)
+                    .count());
+
             return null;
         });
     }

@@ -177,12 +177,20 @@ public class CassandraGroupProvider implements GroupProvider {
     @Override
     public Stream<GroupModel> getTopLevelGroupsStream(
             RealmModel realm, String search, Boolean exact, Integer firstResult, Integer maxResults) {
+        if (search == null) {
+            throw new IllegalArgumentException("search can't be null");
+        }
+
         Groups groups = getGroups(realm.getId());
+        boolean exactSearch = Boolean.TRUE.equals(exact);
+        String lowerCaseSearch = search.toLowerCase();
 
         return groups.getRealmGroups().stream()
                 .filter(group -> group.getParentId() == null)
-                .filter(group -> group.getName().equals(search)
-                        || !exact && group.getName().toLowerCase().contains(search))
+                .filter(group -> search.isEmpty()
+                        || (exactSearch
+                                ? Objects.equals(group.getName(), search)
+                                : group.getName().toLowerCase().contains(lowerCaseSearch)))
                 .skip(firstResult == null || firstResult < 0 ? 0 : firstResult)
                 .limit(maxResults == null || maxResults < 0 ? Long.MAX_VALUE : maxResults)
                 .map(entityToAdapterFunc(realm));
@@ -324,6 +332,10 @@ public class CassandraGroupProvider implements GroupProvider {
     @Override
     public Stream<GroupModel> searchForGroupByNameStream(
             RealmModel realm, String search, Boolean exact, Integer firstResult, Integer maxResults) {
+        if (search == null) {
+            throw new IllegalArgumentException("search can't be null");
+        }
+
         log.debugf(
                 "searchForGroupByNameStream: realmId=%s search=%s exact=%s first=%d max=%d",
                 realm.getId(), search, Boolean.TRUE.equals(exact) ? "true" : "false", firstResult, maxResults);
@@ -334,8 +346,9 @@ public class CassandraGroupProvider implements GroupProvider {
         if (Boolean.TRUE.equals(exact)) {
             groupValueStream = groupValueStream.filter(group -> group.getName().equals(search));
         } else {
+            String lowerCaseSearch = search.toLowerCase();
             groupValueStream = groupValueStream.filter(
-                    group -> group.getName().toLowerCase().contains(search.toLowerCase()));
+                    group -> group.getName().toLowerCase().contains(lowerCaseSearch));
         }
 
         return groupValueStream

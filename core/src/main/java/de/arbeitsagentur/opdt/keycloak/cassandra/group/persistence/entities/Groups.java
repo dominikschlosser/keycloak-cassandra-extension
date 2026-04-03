@@ -32,30 +32,30 @@ public class Groups implements TransactionalEntity, HasAttributes {
 
     public Set<GroupValue> getRealmGroups() {
         if (realmGroups == null) {
-            return new HashSet<>();
+            realmGroups = new HashSet<>();
         }
         return realmGroups;
     }
 
     public GroupValue getGroupById(String id) {
-        return realmGroups.stream()
+        return getRealmGroups().stream()
                 .filter(group -> group.getId().equals(id))
                 .findFirst()
                 .orElse(null);
     }
 
     public List<GroupValue> getRealmGroupsByParentId(String id) {
-        return realmGroups.stream()
+        return getRealmGroups().stream()
                 .filter(group -> Objects.equals(group.getParentId(), id))
                 .collect(Collectors.toList());
     }
 
     public void addRealmGroup(GroupValue group) {
-        realmGroups.add(group);
+        getRealmGroups().add(group);
     }
 
     public boolean removeRealmGroup(String id) {
-        return realmGroups.remove(GroupValue.builder().id(id).build());
+        return getRealmGroups().remove(GroupValue.builder().id(id).build());
     }
 
     @Override

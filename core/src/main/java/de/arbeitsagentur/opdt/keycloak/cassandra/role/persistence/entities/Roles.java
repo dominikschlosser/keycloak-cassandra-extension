@@ -63,12 +63,12 @@ public class Roles implements TransactionalEntity, HasAttributes {
     }
 
     public RoleValue getRoleById(String id) {
-        RoleValue realmRole = realmRoles.stream()
+        RoleValue realmRole = getRealmRoles().stream()
                 .filter(r -> r.getId().equals(id))
                 .findFirst()
                 .orElse(null);
         if (realmRole == null) {
-            return clientRoles.entrySet().stream()
+            return getClientRoles().entrySet().stream()
                     .flatMap(e -> e.getValue().stream().filter(r -> r.getId().equals(id)))
                     .findFirst()
                     .orElse(null);
@@ -77,32 +77,34 @@ public class Roles implements TransactionalEntity, HasAttributes {
     }
 
     public void addRealmRole(RoleValue role) {
-        realmRoles.add(role);
+        getRealmRoles().add(role);
     }
 
     public List<RoleValue> getRealmRoles(Integer first, Integer max) {
-        return realmRoles.stream()
+        return getRealmRoles().stream()
                 .skip(first == null || first < 0 ? 0 : first)
                 .limit(max == null || max < 0 ? Long.MAX_VALUE : max)
                 .collect(Collectors.toList());
     }
 
     public boolean removeClientRole(String clientId, String id) {
-        return clientRoles.get(clientId).remove(RoleValue.builder().id(id).build());
+        Set<RoleValue> rolesByClient = getClientRoles().get(clientId);
+        return rolesByClient != null
+                && rolesByClient.remove(RoleValue.builder().id(id).build());
     }
 
     public boolean removeRealmRole(String id) {
-        return realmRoles.remove(RoleValue.builder().id(id).build());
+        return getRealmRoles().remove(RoleValue.builder().id(id).build());
     }
 
     public void addClientRole(String clientId, RoleValue role) {
-        Set<RoleValue> concreteClientRoles = clientRoles.getOrDefault(clientId, new HashSet<>());
+        Set<RoleValue> concreteClientRoles = getClientRoles().getOrDefault(clientId, new HashSet<>());
         concreteClientRoles.add(role);
-        clientRoles.put(clientId, concreteClientRoles);
+        getClientRoles().put(clientId, concreteClientRoles);
     }
 
     public Collection<RoleValue> getClientRoles(String clientId, Integer first, Integer max) {
-        return clientRoles.getOrDefault(clientId, new HashSet<>()).stream()
+        return getClientRoles().getOrDefault(clientId, new HashSet<>()).stream()
                 .skip(first == null || first < 0 ? 0 : first)
                 .limit(max == null || max < 0 ? Long.MAX_VALUE : max)
                 .collect(Collectors.toList());

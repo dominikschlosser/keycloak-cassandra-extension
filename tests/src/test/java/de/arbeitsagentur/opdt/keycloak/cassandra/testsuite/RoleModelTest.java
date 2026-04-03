@@ -165,6 +165,21 @@ public class RoleModelTest extends KeycloakModelTest {
     }
 
     @Test
+    public void testRolesWithIdsSearchQueriesHandleUnknownIdsWithoutNpe() {
+        List<RoleModel> result = withRealm(realmId, (session, realm) -> session.roles()
+                .getRolesStream(
+                        realm,
+                        IntStream.range(0, 10).boxed().map(i -> UUID.randomUUID()
+                                .toString()),
+                        "role-composite",
+                        null,
+                        null)
+                .collect(Collectors.toList()));
+
+        assertThat(result, is(empty()));
+    }
+
+    @Test
     public void testCompositeRolesSearchQueries() {
         testRolesWithIdsSearchQueries(this::getModelResult);
     }

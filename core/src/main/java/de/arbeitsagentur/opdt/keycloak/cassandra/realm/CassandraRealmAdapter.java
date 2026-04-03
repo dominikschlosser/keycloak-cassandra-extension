@@ -794,9 +794,12 @@ public class CassandraRealmAdapter extends TransactionalModelAdapter<Realm> impl
         };
 
         creds.stream()
-                .map(RequiredCredentialModel.BUILT_IN::get)
-                .peek(c -> {
-                    if (c == null) throw new RuntimeException("Unknown credential type " + c.getType());
+                .map(type -> {
+                    RequiredCredentialModel requiredCredential = RequiredCredentialModel.BUILT_IN.get(type);
+                    if (requiredCredential == null) {
+                        throw new RuntimeException("Unknown credential type " + type);
+                    }
+                    return requiredCredential;
                 })
                 .forEach(updateCredentialFnc);
 

@@ -33,37 +33,30 @@ public class ClientScopes implements TransactionalEntity, HasAttributes {
 
     public Set<ClientScopeValue> getClientScopes() {
         if (clientScopes == null) {
-            return new HashSet<>();
+            clientScopes = new HashSet<>();
         }
         return clientScopes;
     }
 
     public ClientScopeValue getClientScopeById(String id) {
-        ClientScopeValue clientScope = clientScopes.stream()
+        return getClientScopes().stream()
                 .filter(s -> s.getId().equals(id))
                 .findFirst()
                 .orElse(null);
-        if (clientScope == null) {
-            return clientScopes.stream()
-                    .filter(r -> r.getId().equals(id))
-                    .findFirst()
-                    .orElse(null);
-        }
-        return clientScope;
     }
 
     public List<ClientScopeValue> getClientScopesByProtocol(String protocol) {
-        return clientScopes.stream()
+        return getClientScopes().stream()
                 .filter(s -> Objects.equals(s.getFirstAttribute(CassandraClientScopeAdapter.PROTOCOL), protocol))
                 .collect(Collectors.toList());
     }
 
     public void addClientScope(ClientScopeValue clientScopeValue) {
-        clientScopes.add(clientScopeValue);
+        getClientScopes().add(clientScopeValue);
     }
 
     public boolean removeClientScope(String id) {
-        return clientScopes.removeIf(s -> Objects.equals(s.getId(), id));
+        return getClientScopes().removeIf(s -> Objects.equals(s.getId(), id));
     }
 
     public Map<String, List<String>> getAttributes() {

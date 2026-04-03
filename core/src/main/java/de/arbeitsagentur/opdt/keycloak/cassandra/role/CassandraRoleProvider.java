@@ -124,11 +124,14 @@ public class CassandraRoleProvider implements RoleProvider {
         log.debugf("get all realm roles: realmId=%s search=%s first=%s max=%s", realm.getId(), search, first, max);
 
         Roles roles = getRoles(realm.getId());
+        String searchTerm = search == null ? null : search.toLowerCase();
         return ids.map(roles::getRoleById)
-                .filter(role -> search == null
-                        || search.isEmpty()
-                        || role.getName().toLowerCase().contains(search.toLowerCase())
-                        || role.getDescription().toLowerCase().contains(search.toLowerCase()))
+                .filter(Objects::nonNull)
+                .filter(role -> searchTerm == null
+                        || searchTerm.isEmpty()
+                        || role.getName().toLowerCase().contains(searchTerm)
+                        || (role.getDescription() != null
+                                && role.getDescription().toLowerCase().contains(searchTerm)))
                 .map(entityToAdapterFunc(realm))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(RoleModel::getName))

@@ -851,6 +851,16 @@ public class RealmModelTest extends KeycloakModelTest {
     }
 
     @Test
+    public void testUpdateRequiredCredentialsUnknownType() {
+        withRealm(realmId, (s, realm) -> {
+            RuntimeException e =
+                    assertThrows(RuntimeException.class, () -> realm.updateRequiredCredentials(Set.of("unknown")));
+            assertThat(e.getMessage(), containsString("Unknown credential type unknown"));
+            return null;
+        });
+    }
+
+    @Test
     public void testMasterAdminClient() {
         withRealm(realmId, (s, realm) -> {
             ClientModel client = s.clients().addClient(realm, "adminClient");
