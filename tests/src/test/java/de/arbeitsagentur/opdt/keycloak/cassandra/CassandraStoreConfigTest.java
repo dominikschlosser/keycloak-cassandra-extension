@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
 import java.util.EnumSet;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,5 +71,52 @@ class CassandraStoreConfigTest {
         for (Area area : Area.values()) {
             assertFalse(CassandraStoreConfig.isAreaEnabled(area));
         }
+    }
+
+    @Test
+    void conditionalAreasAreParsedLikeAreas() {
+        assertEquals(
+                EnumSet.of(Area.CLIENT, Area.USER_SESSION),
+                CassandraStoreConfig.parseConditionalAreas(" Client ,user-session"));
+        assertEquals(CassandraStoreConfig.dynamicAreas(), CassandraStoreConfig.parseConditionalAreas("cache"));
+    }
+
+    @Test
+    void conditionalAllShorthandExcludesRealm() {
+        Set<Area> expected = EnumSet.allOf(Area.class);
+        expected.remove(Area.REALM);
+        assertEquals(expected, CassandraStoreConfig.parseConditionalAreas("all"));
+    }
+
+    @Test
+    void realmCannotBeConditional() {
+        assertThrows(IllegalArgumentException.class, () -> CassandraStoreConfig.parseConditionalAreas("realm"));
+        assertThrows(IllegalArgumentException.class, () -> CassandraStoreConfig.parseConditionalAreas("user,realm"));
+    }
+
+    @Test
+    void areaCannotBeBothUnconditionalAndConditional() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> CassandraStoreConfig.of(EnumSet.of(Area.CLIENT, Area.USER), EnumSet.of(Area.CLIENT)));
+    }
+
+    @Test
+    void conditionalAreasAreActiveButNotEnabled() {
+        CassandraStoreConfig.of(EnumSet.of(Area.USER), EnumSet.of(Area.CLIENT));
+        assertTrue(CassandraStoreConfig.isAreaEnabled(Area.USER));
+        assertTrue(CassandraStoreConfig.isAreaActive(Area.USER));
+        assertFalse(CassandraStoreConfig.isAreaEnabled(Area.CLIENT));
+        assertTrue(CassandraStoreConfig.isAreaConditional(Area.CLIENT));
+        assertTrue(CassandraStoreConfig.isAreaActive(Area.CLIENT));
+        assertFalse(CassandraStoreConfig.isAreaActive(Area.GROUP));
+    }
+
+    @Test
+    void conditionalRealmAttributeUsesCamelCasedAreaName() {
+        assertEquals("datastoreClientEnabled", Area.CLIENT.conditionalRealmAttribute());
+        assertEquals("datastoreClientScopeEnabled", Area.CLIENT_SCOPE.conditionalRealmAttribute());
+        assertEquals("datastoreUserSessionEnabled", Area.USER_SESSION.conditionalRealmAttribute());
+        assertEquals("datastoreSingleUseObjectEnabled", Area.SINGLE_USE_OBJECT.conditionalRealmAttribute());
     }
 }

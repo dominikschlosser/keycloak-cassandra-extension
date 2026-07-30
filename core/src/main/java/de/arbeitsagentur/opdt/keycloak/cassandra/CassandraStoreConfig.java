@@ -45,6 +45,13 @@ import org.keycloak.Config;
  * both directly ({@code session.getProvider(X.class)}) and through another datastore's fall-through
  * ({@code super.users()} etc.). A disabled area leaves the built-in jpa/infinispan provider in
  * place.
+ *
+ * <p>{@code --spi-datastore--cassandra--conditional-areas} additionally routes areas per realm. The
+ * factory registers as usual, but hands out a {@code Routed*Provider} wrapper (see {@link
+ * ConditionalAreaRouter}) that serves a realm from cassandra only when the realm has the opt-in
+ * attribute of the area (e.g. {@code datastoreClientEnabled=true}). Otherwise it delegates to the
+ * highest-order non-cassandra provider of the SPI. Every area except {@code realm} itself can be
+ * conditional.
  */
 public final class CassandraStoreConfig {
 
@@ -77,6 +84,18 @@ public final class CassandraStoreConfig {
             return dynamic;
         }
 
+        /**
+         * The realm attribute that opts a realm into cassandra when this area is conditional, e.g.
+         * {@code datastoreClientEnabled} for {@code client}.
+         */
+        public String conditionalRealmAttribute() {
+            StringBuilder name = new StringBuilder("datastore");
+            for (String part : configName.split("-")) {
+                name.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+            }
+            return name.append("Enabled").toString();
+        }
+
         static Area fromConfigName(String name) {
             String normalized = name.trim().toLowerCase(Locale.ROOT);
             return Arrays.stream(values())
@@ -92,9 +111,21 @@ public final class CassandraStoreConfig {
     private static volatile CassandraStoreConfig instance;
 
     private final Set<Area> areas;
+    private final Set<Area> conditionalAreas;
 
-    private CassandraStoreConfig(Set<Area> areas) {
-        this.areas = areas.isEmpty() ? EnumSet.noneOf(Area.class) : EnumSet.copyOf(areas);
+    private CassandraStoreConfig(Set<Area> areas, Set<Area> conditionalAreas) {
+        Set<Area> overlap = copy(areas);
+        overlap.retainAll(conditionalAreas);
+        if (!overlap.isEmpty()) {
+            throw new IllegalArgumentException("Areas cannot be both unconditional and conditional: "
+                    + overlap.stream().map(a -> a.configName).collect(Collectors.joining(", ")));
+        }
+        this.areas = copy(areas);
+        this.conditionalAreas = copy(conditionalAreas);
+    }
+
+    private static Set<Area> copy(Set<Area> areas) {
+        return areas.isEmpty() ? EnumSet.noneOf(Area.class) : EnumSet.copyOf(areas);
     }
 
     /** The dynamic areas - the {@code cache} shorthand, i.e. Cassandra as a cache in front of JPA. */
@@ -123,15 +154,43 @@ public final class CassandraStoreConfig {
         return areas;
     }
 
-    private static Set<Area> resolveAreas(Config.Scope scope) {
+    /**
+     * Same grammar as {@code areas}, but the realm area itself cannot be conditional. {@code all}
+     * therefore means every area except {@code realm}.
+     */
+    static Set<Area> parseConditionalAreas(String value) {
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        Set<Area> areas;
+        if ("all".equals(normalized)) {
+            areas = EnumSet.allOf(Area.class);
+            areas.remove(Area.REALM);
+        } else {
+            areas = parseAreas(value);
+            if (areas.contains(Area.REALM)) {
+                throw new IllegalArgumentException(
+                        "The realm area cannot be conditional (the opt-in attribute lives on the realm itself)");
+            }
+        }
+        return areas;
+    }
+
+    private static CassandraStoreConfig resolve(Config.Scope scope) {
+        String conditionalValue = scope == null ? null : scope.get("conditional-areas");
+        Set<Area> conditionalAreas = conditionalValue != null && !conditionalValue.isBlank()
+                ? parseConditionalAreas(conditionalValue)
+                : EnumSet.noneOf(Area.class);
+
         String value = scope == null ? null : scope.get("areas");
+        Set<Area> areas;
         if (value != null && !value.isBlank()) {
-            return parseAreas(value);
+            areas = parseAreas(value);
+        } else if (DATASTORE_PROVIDER_ID.equals(Config.getProvider("datastore"))) {
+            areas = EnumSet.allOf(Area.class);
+            areas.removeAll(conditionalAreas);
+        } else {
+            areas = EnumSet.noneOf(Area.class);
         }
-        if (DATASTORE_PROVIDER_ID.equals(Config.getProvider("datastore"))) {
-            return EnumSet.allOf(Area.class);
-        }
-        return EnumSet.noneOf(Area.class);
+        return new CassandraStoreConfig(areas, conditionalAreas);
     }
 
     public static CassandraStoreConfig get() {
@@ -139,7 +198,7 @@ public final class CassandraStoreConfig {
         if (config == null) {
             synchronized (CassandraStoreConfig.class) {
                 if (instance == null) {
-                    instance = new CassandraStoreConfig(resolveAreas(Config.scope("datastore", "cassandra")));
+                    instance = resolve(Config.scope("datastore", "cassandra"));
                 }
                 config = instance;
             }
@@ -149,7 +208,12 @@ public final class CassandraStoreConfig {
 
     /** Programmatic configuration for tests. */
     public static CassandraStoreConfig of(Set<Area> areas) {
-        CassandraStoreConfig config = new CassandraStoreConfig(areas);
+        return of(areas, EnumSet.noneOf(Area.class));
+    }
+
+    /** Programmatic configuration for tests. */
+    public static CassandraStoreConfig of(Set<Area> areas, Set<Area> conditionalAreas) {
+        CassandraStoreConfig config = new CassandraStoreConfig(areas, conditionalAreas);
         instance = config;
         return config;
     }
@@ -159,11 +223,26 @@ public final class CassandraStoreConfig {
         instance = null;
     }
 
+    /** True when the area is unconditionally cassandra-backed. */
     public static boolean isAreaEnabled(Area area) {
         return get().areas.contains(area);
     }
 
+    /** True when the area is cassandra-backed only for realms carrying the opt-in attribute. */
+    public static boolean isAreaConditional(Area area) {
+        return get().conditionalAreas.contains(area);
+    }
+
+    /** True when the cassandra provider factory of the area must be registered at all. */
+    public static boolean isAreaActive(Area area) {
+        return isAreaEnabled(area) || isAreaConditional(area);
+    }
+
     public Set<Area> getAreas() {
-        return EnumSet.copyOf(areas.isEmpty() ? EnumSet.noneOf(Area.class) : areas);
+        return copy(areas);
+    }
+
+    public Set<Area> getConditionalAreas() {
+        return copy(conditionalAreas);
     }
 }
