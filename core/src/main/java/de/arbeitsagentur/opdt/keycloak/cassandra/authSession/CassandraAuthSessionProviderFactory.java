@@ -16,22 +16,25 @@
 
 package de.arbeitsagentur.opdt.keycloak.cassandra.authSession;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 import static de.arbeitsagentur.opdt.keycloak.common.ProviderHelpers.createProviderCached;
 import static org.keycloak.userprofile.DeclarativeUserProfileProviderFactory.PROVIDER_PRIORITY;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import de.arbeitsagentur.opdt.keycloak.cassandra.connection.CassandraConnectionProvider;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.provider.EnvironmentDependentProviderFactory;
+import org.keycloak.sessions.AuthenticationSessionProvider;
 import org.keycloak.sessions.AuthenticationSessionProviderFactory;
 
 @AutoService(AuthenticationSessionProviderFactory.class)
 public class CassandraAuthSessionProviderFactory
-        implements AuthenticationSessionProviderFactory<CassandraAuthSessionProvider>,
+        implements AuthenticationSessionProviderFactory<AuthenticationSessionProvider>,
                 EnvironmentDependentProviderFactory {
     public static final String AUTH_SESSIONS_LIMIT = "authSessionsLimit";
 
@@ -40,11 +43,14 @@ public class CassandraAuthSessionProviderFactory
     private int authSessionsLimit = 0;
 
     @Override
-    public CassandraAuthSessionProvider create(KeycloakSession session) {
+    public AuthenticationSessionProvider create(KeycloakSession session) {
         CassandraConnectionProvider cassandraConnectionProvider =
                 createProviderCached(session, CassandraConnectionProvider.class);
-        return new CassandraAuthSessionProvider(
+        CassandraAuthSessionProvider provider = new CassandraAuthSessionProvider(
                 session, cassandraConnectionProvider.getRepository(), authSessionsLimit);
+        return isAreaConditional(Area.AUTH_SESSION)
+                ? new RoutedAuthenticationSessionProvider(session, provider, getId())
+                : provider;
     }
 
     @Override
@@ -55,7 +61,9 @@ public class CassandraAuthSessionProviderFactory
     }
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(factory, Area.AUTH_SESSION, AuthenticationSessionProvider.class, getId());
+    }
 
     @Override
     public void close() {}
@@ -72,6 +80,6 @@ public class CassandraAuthSessionProviderFactory
 
     @Override
     public boolean isSupported(Config.Scope config) {
-        return isAreaEnabled(Area.AUTH_SESSION);
+        return isAreaActive(Area.AUTH_SESSION);
     }
 }

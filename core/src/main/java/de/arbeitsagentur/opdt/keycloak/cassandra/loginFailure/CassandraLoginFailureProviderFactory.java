@@ -16,34 +16,43 @@
 
 package de.arbeitsagentur.opdt.keycloak.cassandra.loginFailure;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 import static de.arbeitsagentur.opdt.keycloak.common.ProviderHelpers.createProviderCached;
 import static org.keycloak.userprofile.DeclarativeUserProfileProviderFactory.PROVIDER_PRIORITY;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import de.arbeitsagentur.opdt.keycloak.cassandra.connection.CassandraConnectionProvider;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
+import org.keycloak.models.UserLoginFailureProvider;
 import org.keycloak.models.UserLoginFailureProviderFactory;
 import org.keycloak.provider.EnvironmentDependentProviderFactory;
 
 @AutoService(UserLoginFailureProviderFactory.class)
 public class CassandraLoginFailureProviderFactory
-        implements UserLoginFailureProviderFactory<CassandraLoginFailureProvider>, EnvironmentDependentProviderFactory {
+        implements UserLoginFailureProviderFactory<UserLoginFailureProvider>, EnvironmentDependentProviderFactory {
     @Override
-    public CassandraLoginFailureProvider create(KeycloakSession session) {
+    public UserLoginFailureProvider create(KeycloakSession session) {
         CassandraConnectionProvider cassandraConnectionProvider =
                 createProviderCached(session, CassandraConnectionProvider.class);
-        return new CassandraLoginFailureProvider(cassandraConnectionProvider.getRepository());
+        CassandraLoginFailureProvider provider =
+                new CassandraLoginFailureProvider(cassandraConnectionProvider.getRepository());
+        return isAreaConditional(Area.LOGIN_FAILURE)
+                ? new RoutedUserLoginFailureProvider(session, provider, getId())
+                : provider;
     }
 
     @Override
     public void init(Config.Scope config) {}
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(factory, Area.LOGIN_FAILURE, UserLoginFailureProvider.class, getId());
+    }
 
     @Override
     public void close() {}
@@ -60,6 +69,6 @@ public class CassandraLoginFailureProviderFactory
 
     @Override
     public boolean isSupported(Config.Scope config) {
-        return isAreaEnabled(Area.LOGIN_FAILURE);
+        return isAreaActive(Area.LOGIN_FAILURE);
     }
 }

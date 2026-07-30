@@ -35,6 +35,25 @@ The filestore extension follows the same activation patterns (datastore selectio
 
 When `cassandra` is the selected datastore, this extension automatically disables the coherency-sensitive realm and authorization caches (unsafe under `stateless`), so you no longer need to set those by hand.
 
+### Conditional storage areas (per realm)
+
+`--spi-datastore--cassandra--conditional-areas` routes areas per realm instead of globally. Cassandra serves a conditional area only for realms that have the opt-in attribute of that area. All other realms keep the provider that would have been default without this extension (for example the filestore or JPA provider). Every area except `realm` itself can be conditional (`all` means every area except `realm`). An area cannot be listed in both `areas` and `conditional-areas`.
+
+The opt-in is a realm attribute named `datastore<Area>Enabled` with the camel-cased area name (for example `datastoreClientEnabled`, `datastoreClientScopeEnabled`, `datastoreUserSessionEnabled`). Example: clients come from cassandra only for realms with `datastoreClientEnabled=true`. Users and sessions always come from cassandra.
+
+```
+--spi-datastore--provider=file
+--spi-datastore--cassandra--areas=user,user-session,auth-session,login-failure,single-use-object,revoked-token
+--spi-datastore--cassandra--conditional-areas=client
+```
+
+Notes and caveats:
+
+- Every conditional area needs a fallback provider (another registered provider of the same SPI). The server fails at startup when there is none. The session-related areas (`user-session`, `auth-session`, `login-failure`, `single-use-object`, `revoked-token`) replace the embedded infinispan providers, so infinispan cannot be their fallback. These areas can only be conditional when another datastore extension serves them.
+- Routing happens per call and uses the `RealmModel` argument of the called method. SPIs without realm arguments (`single-use-object`, `revoked-token`, `identity-provider`) use the session context realm. Calls with no resolvable realm stay on cassandra.
+- The attribute only controls where new lookups and writes go. It does not migrate data. Entities created while the attribute was unset stay in the fallback store. They are no longer visible once the attribute is set. The same applies in the other direction.
+- Realm import creates the default clients and roles before the imported realm attributes are applied. If an imported realm representation already contains the opt-in attribute, those defaults therefore end up in the fallback store. Create the realm first, then set the attribute, then create the entities of that area (or migrate existing entities before changing the attribute).
+
 The following parameters might be needed in addition to the configuration options of this extension (see below):
 
 | CLI-Parameter                                                           | Description                                                              |

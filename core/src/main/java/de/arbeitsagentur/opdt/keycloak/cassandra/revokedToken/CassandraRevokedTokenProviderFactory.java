@@ -15,31 +15,39 @@
  */
 package de.arbeitsagentur.opdt.keycloak.cassandra.revokedToken;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 import static org.keycloak.userprofile.DeclarativeUserProfileProviderFactory.PROVIDER_PRIORITY;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
+import org.keycloak.models.RevokedTokenProvider;
 import org.keycloak.models.RevokedTokenProviderFactory;
 import org.keycloak.provider.EnvironmentDependentProviderFactory;
 
 @AutoService(RevokedTokenProviderFactory.class)
 public class CassandraRevokedTokenProviderFactory
-        implements RevokedTokenProviderFactory<CassandraRevokedTokenProvider>, EnvironmentDependentProviderFactory {
+        implements RevokedTokenProviderFactory<RevokedTokenProvider>, EnvironmentDependentProviderFactory {
 
     @Override
-    public CassandraRevokedTokenProvider create(KeycloakSession session) {
-        return new CassandraRevokedTokenProvider(session);
+    public RevokedTokenProvider create(KeycloakSession session) {
+        CassandraRevokedTokenProvider provider = new CassandraRevokedTokenProvider(session);
+        return isAreaConditional(Area.REVOKED_TOKEN)
+                ? new RoutedRevokedTokenProvider(session, provider, getId())
+                : provider;
     }
 
     @Override
     public void init(Config.Scope config) {}
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(factory, Area.REVOKED_TOKEN, RevokedTokenProvider.class, getId());
+    }
 
     @Override
     public void close() {}
@@ -56,6 +64,6 @@ public class CassandraRevokedTokenProviderFactory
 
     @Override
     public boolean isSupported(Config.Scope config) {
-        return isAreaEnabled(Area.REVOKED_TOKEN);
+        return isAreaActive(Area.REVOKED_TOKEN);
     }
 }

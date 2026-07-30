@@ -16,36 +16,44 @@
 
 package de.arbeitsagentur.opdt.keycloak.cassandra.singleUseObject;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 import static de.arbeitsagentur.opdt.keycloak.common.ProviderHelpers.createProviderCached;
 import static org.keycloak.userprofile.DeclarativeUserProfileProviderFactory.PROVIDER_PRIORITY;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import de.arbeitsagentur.opdt.keycloak.cassandra.connection.CassandraConnectionProvider;
 import org.keycloak.Config;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
+import org.keycloak.models.SingleUseObjectProvider;
 import org.keycloak.models.SingleUseObjectProviderFactory;
 import org.keycloak.provider.EnvironmentDependentProviderFactory;
 
 @AutoService(SingleUseObjectProviderFactory.class)
 public class CassandraSingleUseObjectProviderFactory
-        implements SingleUseObjectProviderFactory<CassandraSingleUseObjectProvider>,
-                EnvironmentDependentProviderFactory {
+        implements SingleUseObjectProviderFactory<SingleUseObjectProvider>, EnvironmentDependentProviderFactory {
 
     @Override
-    public CassandraSingleUseObjectProvider create(KeycloakSession session) {
+    public SingleUseObjectProvider create(KeycloakSession session) {
         CassandraConnectionProvider cassandraConnectionProvider =
                 createProviderCached(session, CassandraConnectionProvider.class);
-        return new CassandraSingleUseObjectProvider(cassandraConnectionProvider.getRepository());
+        CassandraSingleUseObjectProvider provider =
+                new CassandraSingleUseObjectProvider(cassandraConnectionProvider.getRepository());
+        return isAreaConditional(Area.SINGLE_USE_OBJECT)
+                ? new RoutedSingleUseObjectProvider(session, provider, getId())
+                : provider;
     }
 
     @Override
     public void init(Config.Scope config) {}
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(factory, Area.SINGLE_USE_OBJECT, SingleUseObjectProvider.class, getId());
+    }
 
     @Override
     public void close() {}
@@ -62,6 +70,6 @@ public class CassandraSingleUseObjectProviderFactory
 
     @Override
     public boolean isSupported(Config.Scope config) {
-        return isAreaEnabled(Area.SINGLE_USE_OBJECT);
+        return isAreaActive(Area.SINGLE_USE_OBJECT);
     }
 }

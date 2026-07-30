@@ -16,14 +16,17 @@
 
 package de.arbeitsagentur.opdt.keycloak.cassandra.group;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 import static de.arbeitsagentur.opdt.keycloak.common.ProviderHelpers.createProviderCached;
 import static org.keycloak.userprofile.DeclarativeUserProfileProviderFactory.PROVIDER_PRIORITY;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import de.arbeitsagentur.opdt.keycloak.cassandra.connection.CassandraConnectionProvider;
 import org.keycloak.Config;
+import org.keycloak.models.GroupProvider;
 import org.keycloak.models.GroupProviderFactory;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
@@ -31,19 +34,23 @@ import org.keycloak.provider.EnvironmentDependentProviderFactory;
 
 @AutoService(GroupProviderFactory.class)
 public class CassandraGroupProviderFactory
-        implements GroupProviderFactory<CassandraGroupProvider>, EnvironmentDependentProviderFactory {
+        implements GroupProviderFactory<GroupProvider>, EnvironmentDependentProviderFactory {
     @Override
-    public CassandraGroupProvider create(KeycloakSession session) {
+    public GroupProvider create(KeycloakSession session) {
         CassandraConnectionProvider cassandraConnectionProvider =
                 createProviderCached(session, CassandraConnectionProvider.class);
-        return new CassandraGroupProvider(session, cassandraConnectionProvider.getRepository());
+        CassandraGroupProvider provider =
+                new CassandraGroupProvider(session, cassandraConnectionProvider.getRepository());
+        return isAreaConditional(Area.GROUP) ? new RoutedGroupProvider(session, provider, getId()) : provider;
     }
 
     @Override
     public void init(Config.Scope config) {}
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(factory, Area.GROUP, GroupProvider.class, getId());
+    }
 
     @Override
     public void close() {}
@@ -60,6 +67,6 @@ public class CassandraGroupProviderFactory
 
     @Override
     public boolean isSupported(Config.Scope config) {
-        return isAreaEnabled(Area.GROUP);
+        return isAreaActive(Area.GROUP);
     }
 }

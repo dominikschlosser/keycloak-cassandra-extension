@@ -28,6 +28,7 @@ import org.keycloak.Config;
 import org.keycloak.common.Profile;
 import org.keycloak.models.*;
 import org.keycloak.provider.InvalidationHandler;
+import org.keycloak.provider.Provider;
 import org.keycloak.storage.DatastoreProvider;
 import org.keycloak.storage.DatastoreProviderFactory;
 
@@ -69,29 +70,38 @@ public class CassandraDatastoreProviderFactory implements DatastoreProviderFacto
     @Override
     public void close() {}
 
+    // The invalidations below clean up cassandra-side rows, so they must reach the cassandra
+    // provider even when its area is conditional and the resolved provider is a routing wrapper.
+    @SuppressWarnings("unchecked")
+    private static <T extends Provider> T cassandra(T provider) {
+        return provider instanceof ConditionallyRouted routed ? (T) routed.cassandraDelegate() : provider;
+    }
+
     @Override
     public void invalidate(KeycloakSession session, InvalidableObjectType type, Object... params) {
         if (type == REALM_BEFORE_REMOVE) {
-            create(session).users().preRemove((RealmModel) params[0]);
-            ((CassandraClientProvider) create(session).clients()).preRemove((RealmModel) params[0]);
-            ((CassandraClientScopeProvider) create(session).clientScopes()).preRemove((RealmModel) params[0]);
-            ((CassandraRoleProvider) create(session).roles()).preRemove((RealmModel) params[0]);
-            ((CassandraGroupProvider) create(session).groups()).preRemove((RealmModel) params[0]);
+            cassandra(create(session).users()).preRemove((RealmModel) params[0]);
+            ((CassandraClientProvider) cassandra(create(session).clients())).preRemove((RealmModel) params[0]);
+            ((CassandraClientScopeProvider) cassandra(create(session).clientScopes()))
+                    .preRemove((RealmModel) params[0]);
+            ((CassandraRoleProvider) cassandra(create(session).roles())).preRemove((RealmModel) params[0]);
+            ((CassandraGroupProvider) cassandra(create(session).groups())).preRemove((RealmModel) params[0]);
         } else if (type == ROLE_BEFORE_REMOVE) {
-            create(session).users().preRemove((RealmModel) params[0], (RoleModel) params[1]);
-            ((CassandraClientProvider) create(session).clients())
+            cassandra(create(session).users()).preRemove((RealmModel) params[0], (RoleModel) params[1]);
+            ((CassandraClientProvider) cassandra(create(session).clients()))
                     .preRemove((RealmModel) params[0], (RoleModel) params[1]);
-            ((CassandraRoleProvider) create(session).roles()).preRemove((RealmModel) params[0], (RoleModel) params[1]);
-            ((CassandraGroupProvider) create(session).groups())
+            ((CassandraRoleProvider) cassandra(create(session).roles()))
+                    .preRemove((RealmModel) params[0], (RoleModel) params[1]);
+            ((CassandraGroupProvider) cassandra(create(session).groups()))
                     .preRemove((RealmModel) params[0], (RoleModel) params[1]);
         } else if (type == CLIENT_SCOPE_BEFORE_REMOVE) {
-            create(session).users().preRemove((ClientScopeModel) params[1]);
+            cassandra(create(session).users()).preRemove((ClientScopeModel) params[1]);
             ((RealmModel) params[0]).removeDefaultClientScope((ClientScopeModel) params[1]);
         } else if (type == CLIENT_BEFORE_REMOVE) {
-            create(session).users().preRemove((RealmModel) params[0], (ClientModel) params[1]);
-            create(session).roles().removeRoles((ClientModel) params[1]);
+            cassandra(create(session).users()).preRemove((RealmModel) params[0], (ClientModel) params[1]);
+            cassandra(create(session).roles()).removeRoles((ClientModel) params[1]);
         } else if (type == GROUP_BEFORE_REMOVE) {
-            create(session).users().preRemove((RealmModel) params[0], (GroupModel) params[1]);
+            cassandra(create(session).users()).preRemove((RealmModel) params[0], (GroupModel) params[1]);
         } else if (type == CLIENT_AFTER_REMOVE) {
             session.getKeycloakSessionFactory().publish(new ClientModel.ClientRemovedEvent() {
                 @Override

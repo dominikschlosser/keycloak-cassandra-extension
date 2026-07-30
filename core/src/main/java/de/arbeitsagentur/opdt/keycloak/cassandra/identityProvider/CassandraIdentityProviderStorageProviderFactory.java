@@ -1,32 +1,40 @@
 package de.arbeitsagentur.opdt.keycloak.cassandra.identityProvider;
 
-import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaEnabled;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaActive;
+import static de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.isAreaConditional;
 
 import com.google.auto.service.AutoService;
 import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig.Area;
+import de.arbeitsagentur.opdt.keycloak.cassandra.ConditionalAreaRouter;
 import org.keycloak.Config;
 import org.keycloak.models.*;
 import org.keycloak.provider.EnvironmentDependentProviderFactory;
 
 @AutoService(IdentityProviderStorageProviderFactory.class)
 public class CassandraIdentityProviderStorageProviderFactory
-        implements IdentityProviderStorageProviderFactory<CassandraIdentityProviderStorageProvider>,
+        implements IdentityProviderStorageProviderFactory<IdentityProviderStorageProvider>,
                 EnvironmentDependentProviderFactory {
     @Override
     public boolean isSupported(Config.Scope scope) {
-        return isAreaEnabled(Area.IDENTITY_PROVIDER);
+        return isAreaActive(Area.IDENTITY_PROVIDER);
     }
 
     @Override
-    public CassandraIdentityProviderStorageProvider create(KeycloakSession session) {
-        return new CassandraIdentityProviderStorageProvider(session);
+    public IdentityProviderStorageProvider create(KeycloakSession session) {
+        CassandraIdentityProviderStorageProvider provider = new CassandraIdentityProviderStorageProvider(session);
+        return isAreaConditional(Area.IDENTITY_PROVIDER)
+                ? new RoutedIdentityProviderStorageProvider(session, provider, getId())
+                : provider;
     }
 
     @Override
     public void init(Config.Scope config) {}
 
     @Override
-    public void postInit(KeycloakSessionFactory factory) {}
+    public void postInit(KeycloakSessionFactory factory) {
+        ConditionalAreaRouter.requireFallback(
+                factory, Area.IDENTITY_PROVIDER, IdentityProviderStorageProvider.class, getId());
+    }
 
     @Override
     public void close() {}
