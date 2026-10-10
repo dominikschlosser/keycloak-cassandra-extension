@@ -1456,6 +1456,9 @@ public class CassandraRealmAdapter extends TransactionalModelAdapter<Realm> impl
         if (model.getId() == null) {
             model.setId(KeycloakModelUtils.generateId());
         }
+        if (model.getParentId() == null) {
+            model.setParentId(getId());
+        }
 
         List<ComponentModel> values = getDeserializedAttributes(COMPONENTS, ComponentModel.class);
         values.add(model);
@@ -1497,14 +1500,14 @@ public class CassandraRealmAdapter extends TransactionalModelAdapter<Realm> impl
     @Override
     public void removeComponents(String parentId) {
         getDeserializedAttributes(COMPONENTS, ComponentModel.class).stream()
-                .filter(e -> Objects.equals(parentId, e.getParentId()))
+                .filter(e -> Objects.equals(parentId, parentIdOf(e)))
                 .forEach(c -> {
                     session.users().preRemove(this, c);
                     ComponentUtil.notifyPreRemove(session, this, c);
                 });
 
         List<ComponentModel> withoutModel = getDeserializedAttributes(COMPONENTS, ComponentModel.class).stream()
-                .filter(e -> !Objects.equals(parentId, e.getParentId()))
+                .filter(e -> !Objects.equals(parentId, parentIdOf(e)))
                 .collect(Collectors.toList());
 
         setSerializedAttributeValues(COMPONENTS, withoutModel);
@@ -1513,14 +1516,19 @@ public class CassandraRealmAdapter extends TransactionalModelAdapter<Realm> impl
     @Override
     public Stream<ComponentModel> getComponentsStream(String parentId, String providerType) {
         return getDeserializedAttributes(COMPONENTS, ComponentModel.class).stream()
-                .filter(e -> Objects.equals(parentId, e.getParentId()))
+                .filter(e -> Objects.equals(parentId, parentIdOf(e)))
                 .filter(e -> Objects.equals(providerType, e.getProviderType()));
     }
 
     @Override
     public Stream<ComponentModel> getComponentsStream(String parentId) {
         return getDeserializedAttributes(COMPONENTS, ComponentModel.class).stream()
-                .filter(e -> Objects.equals(parentId, e.getParentId()));
+                .filter(e -> Objects.equals(parentId, parentIdOf(e)));
+    }
+
+    // Components stored before parent ids were defaulted have none; like JPA, they belong to the realm.
+    private String parentIdOf(ComponentModel component) {
+        return component.getParentId() == null ? getId() : component.getParentId();
     }
 
     @Override

@@ -16,6 +16,7 @@ import org.keycloak.representations.idm.RolesRepresentation;
 import org.keycloak.testframework.annotations.InjectAdminClient;
 import org.keycloak.testframework.annotations.InjectKeycloakUrls;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
+import org.keycloak.testframework.config.Config;
 import org.keycloak.testframework.server.KeycloakUrls;
 
 @KeycloakIntegrationTest(config = CassandraKeycloakServerConfig.class)
@@ -26,6 +27,14 @@ class AdminApiTest {
 
     @InjectKeycloakUrls
     KeycloakUrls keycloakUrls;
+
+    @Test
+    void bootstrapAdminUserCanLogInWithPassword() {
+        try (Keycloak userClient = Keycloak.getInstance(
+                keycloakUrls.getBase(), "master", Config.getAdminUsername(), Config.getAdminPassword(), "admin-cli")) {
+            assertThat(realmNames(userClient), hasItem("master"));
+        }
+    }
 
     @Test
     void realmWithClientRolesCanBeDeleted() {
