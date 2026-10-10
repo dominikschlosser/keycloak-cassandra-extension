@@ -16,6 +16,7 @@
 package de.arbeitsagentur.opdt.keycloak.cassandra.config;
 
 import com.google.auto.service.AutoService;
+import de.arbeitsagentur.opdt.keycloak.cassandra.CassandraStoreConfig;
 import io.smallrye.config.ConfigSourceContext;
 import io.smallrye.config.ConfigSourceFactory;
 import io.smallrye.config.ConfigValue;
@@ -46,6 +47,7 @@ public class CassandraConfigDefaultsSourceFactory implements ConfigSourceFactory
 
     private static final String DATASTORE_PROVIDER = "kc.spi-datastore--provider";
     private static final String CASSANDRA = "cassandra";
+    private static final String AREAS = "kc.spi-datastore--cassandra--areas";
 
     /**
      * The coherency-sensitive caches disabled by default under the Cassandra datastore: the realm
@@ -54,6 +56,12 @@ public class CassandraConfigDefaultsSourceFactory implements ConfigSourceFactory
      */
     private static final List<String> PROVIDER_DISABLES =
             List.of("kc.spi-realm-cache--default--enabled", "kc.spi-authorization-cache--default--enabled");
+
+    /**
+     * JPA's realm factory casts the session's realm provider to {@code JpaRealmProvider} on every
+     * {@code RoleRemovedEvent}, so it must be off whenever Cassandra serves the realm area.
+     */
+    private static final String JPA_REALM_ENABLED = "kc.spi-realm--jpa--enabled";
 
     /**
      * Below every Keycloak config source (persisted build values = 200, {@code keycloak.conf} = 299,
@@ -69,16 +77,30 @@ public class CassandraConfigDefaultsSourceFactory implements ConfigSourceFactory
 
     @Override
     public Iterable<ConfigSource> getConfigSources(ConfigSourceContext context) {
-        if (!CASSANDRA.equals(value(context, DATASTORE_PROVIDER))) {
-            return List.of();
-        }
+        boolean cassandraDatastore = CASSANDRA.equals(value(context, DATASTORE_PROVIDER));
         Map<String, String> defaults = new HashMap<>();
-        for (String key : PROVIDER_DISABLES) {
-            if (value(context, key) == null) {
-                defaults.put(key, "false");
+        if (cassandraDatastore) {
+            for (String key : PROVIDER_DISABLES) {
+                putIfUnset(context, defaults, key);
             }
         }
+        if (servesRealms(cassandraDatastore, value(context, AREAS))) {
+            putIfUnset(context, defaults, JPA_REALM_ENABLED);
+        }
         return defaults.isEmpty() ? List.of() : List.of(new MapConfigSource(defaults));
+    }
+
+    static boolean servesRealms(boolean cassandraDatastore, String areas) {
+        if (areas == null || areas.isBlank()) {
+            return cassandraDatastore;
+        }
+        return CassandraStoreConfig.parseAreas(areas).contains(CassandraStoreConfig.Area.REALM);
+    }
+
+    private static void putIfUnset(ConfigSourceContext context, Map<String, String> defaults, String key) {
+        if (value(context, key) == null) {
+            defaults.put(key, "false");
+        }
     }
 
     private static String value(ConfigSourceContext context, String key) {
