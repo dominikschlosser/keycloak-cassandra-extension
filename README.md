@@ -45,7 +45,9 @@ disables), so the two compose: `file` is the selected datastore and serves its c
 fall-through resolves to cassandra's providers for the areas listed above.
 
 When `cassandra` is the selected datastore, this extension automatically disables the coherency-sensitive realm and
-authorization caches (unsafe under `stateless`), so you no longer need to set those by hand.
+authorization caches (unsafe under `stateless`), so you no longer need to set those by hand. Whenever cassandra serves
+the `realm` area, it also disables JPA's realm provider (`--spi-realm--jpa--enabled=false`), which otherwise breaks role
+and realm removal.
 
 ### Conditional storage areas (per realm)
 

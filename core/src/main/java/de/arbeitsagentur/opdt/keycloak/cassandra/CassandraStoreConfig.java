@@ -139,7 +139,7 @@ public final class CassandraStoreConfig {
      * Area-set grammar of the {@code areas} option: {@code all} = every area, {@code cache} = the
      * dynamic areas, otherwise a comma-separated list of area config names.
      */
-    static Set<Area> parseAreas(String value) {
+    public static Set<Area> parseAreas(String value) {
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         if ("all".equals(normalized)) {
             return EnumSet.allOf(Area.class);
